@@ -7,12 +7,15 @@
     "oauth2": {
       "client_id": "64302395135-lhrrvatjurj2r0a2gs3gr6etql0pek9b.apps.googleusercontent.com",
       "scopes": [
+        "openid",
+        "email",
         "https://www.googleapis.com/auth/gmail.readonly"
       ]
     },
   
     "permissions": [
     "identity",
+    "identity.email",
     "storage"
     ],
     "host_permissions": [
