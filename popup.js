@@ -5,64 +5,114 @@ document.addEventListener("DOMContentLoaded", function() {
     const switchAccountBtn = document.getElementById("switchAccountBtn");
     const resultsDiv = document.getElementById("results");
   
-    // Helper to display results in the popup
+    function formatNumber(num) {
+      return Number.isInteger(num) ? num : num.toFixed(1);
+    }
+  
+    function getMonthName(monthIndex) {
+      const monthNames = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+      ];
+      return monthNames[monthIndex];
+    }
+  
+    function showLoadingState() {
+      resultsDiv.innerHTML = `
+        <div class="loading">
+          <div class="loading-pulse">Analyzing your applications...</div>
+        </div>
+      `;
+    }
+  
+    function showError(message) {
+      resultsDiv.innerHTML = `
+        <div class="error">
+          ${message}
+        </div>
+      `;
+    }
+  
     function showAnalysisResults(authorizedEmail, analysis) {
-      let headerHTML = `<p><strong>Analysis for:</strong> ${authorizedEmail || "unknown"}</p>`;
       if (!analysis) {
         resultsDiv.innerHTML = `
-          ${headerHTML}
-          <p>No data available. Either no job applications found 
-          or you haven't granted Gmail access.</p>
+          <div class="card">
+            <div class="analysis-header">
+              <strong>Analysis for:</strong> ${authorizedEmail || "unknown"}
+            </div>
+            <div class="error">
+              No data available. Either no job applications found or you haven't granted Gmail access.
+            </div>
+          </div>
         `;
         return;
       }
   
       const { monthlyCount, averagePerDay, todaysCount } = analysis;
-      const monthNames = [
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December"
-      ];
   
-      let monthlyResultsHTML = "";
-      for (const [key, count] of Object.entries(monthlyCount)) {
-        const [year, monthStr] = key.split("-");
-        const monthIndex = parseInt(monthStr, 10) - 1;
-        const monthName = monthNames[monthIndex] || "Unknown";
-        monthlyResultsHTML += `<p>${monthName}, ${year}: ${count}</p>`;
-      }
+      // Sort months in descending order for display
+      const sortedMonths = Object.entries(monthlyCount)
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .map(([key, count]) => {
+          const [year, monthStr] = key.split("-");
+          const monthIndex = parseInt(monthStr, 10) - 1;
+          return { monthName: getMonthName(monthIndex), year, count };
+        });
   
       resultsDiv.innerHTML = `
-        ${headerHTML}
-        <p><strong>Applications per Month:</strong></p>
-        ${monthlyResultsHTML}
-        <p><strong>Average per Day:</strong> ${Math.round(averagePerDay)}</p>
-        <p><strong>Today's Applications:</strong> ${todaysCount || 0}</p>
+        <div class="card">
+          <div class="analysis-header">
+            <strong>Analysis for:</strong> ${authorizedEmail}
+          </div>
+  
+          <div class="stats-container">
+            <div class="stat-item">
+              <span class="stat-label">Average per Day</span>
+              <span class="stat-value">${Math.round(averagePerDay)}</span>
+            </div>
+  
+            <div class="stat-item">
+              <span class="stat-label">Today's Applications</span>
+              <span class="stat-value">${Math.round(todaysCount || 0)}</span>
+            </div>
+  
+            <div class="stat-section">
+              <div class="stat-section-title">Applications per Month</div>
+              ${sortedMonths.map(month => `
+                <div class="stat-item">
+                  <span class="stat-label">${month.monthName}, ${month.year}</span>
+                  <span class="stat-value">${month.count}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
       `;
     }
   
-    // 1) Handle "Analyse My Consistency" (uses the cached/current account)
     analyseBtn.addEventListener("click", () => {
-      resultsDiv.innerHTML = "<p>Loading...</p>";
+      showLoadingState();
       chrome.runtime.sendMessage({ type: "triggerAnalysis" }, (response) => {
-        console.log("Received from background (current account):", response);
+        if (chrome.runtime.lastError) {
+          showError("Failed to analyze applications. Please try again.");
+          return;
+        }
+  
         const { authorizedEmail, analysis } = response;
         showAnalysisResults(authorizedEmail, analysis);
       });
     });
   
-    // 2) Handle "Switch Account" (forces an account chooser, then re-analyzes)
     switchAccountBtn.addEventListener("click", () => {
-      resultsDiv.innerHTML = "<p>Switching account...</p>";
+      showLoadingState();
       chrome.runtime.sendMessage({ type: "switchAccount" }, (response) => {
-        if (response && response.success && response.result) {
-          console.log("Switched account, new analysis result:", response.result);
-          const { authorizedEmail, analysis } = response.result;
-          showAnalysisResults(authorizedEmail, analysis);
-        } else {
-          alert("Unable to switch account or fetch new data.");
-          resultsDiv.innerHTML = "";
+        if (!response || !response.success) {
+          showError("Failed to switch account. Please try again.");
+          return;
         }
+  
+        const { authorizedEmail, analysis } = response.result;
+        showAnalysisResults(authorizedEmail, analysis);
       });
     });
   });
-  
